@@ -1,0 +1,30 @@
+- hosts: localhost
+  vars:
+    clusterName="devocp"
+    
+
+
+  tasks:
+    - name: Get current config
+      shell: 'oc get service -n openshift-ingress router-default -o yaml >ingress.yaml'
+      args:
+        executable: /bin/bash
+      ignore_errors: True
+
+    - name: Get Ip ranges
+      # Add Other known IP address here with the format of "   - IP address"
+      shell: |
+         echo '  loadBalancerSourceRanges:
+           - 10.309.0.0/19'
+         aws ec2 describe-nat-gateways --filter 'Name=tag:Name,Values="{{clusterName}}*"'  | jq  -r '.NatGateways[].NatGatewayAddresses[].PublicIp' | awk '{print "  - "$1"/32"}'
+      args:
+        executable: /bin/bash
+      register: ingress_ip_value
+      ignore_errors: True
+
+    - name: Update ingress.yaml
+      blockinfile:
+        dest: ingress.yaml
+        insertafter: "healthCheckNodePort:"
+        block: "{{ ingress_ip_value.stdout }}"
+      ignore_errors: True
